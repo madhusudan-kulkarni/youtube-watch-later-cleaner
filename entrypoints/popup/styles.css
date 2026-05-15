@@ -1,0 +1,62 @@
+:root {
+  color: #171717;
+  background: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+  width: 200px;
+  margin: 0;
+  padding: 16px;
+}
+
+h1 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #444;
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.primary {
+  background: #c00;
+  color: #fff;
+}
+
+.danger {
+  background: #c00;
+  color: #fff;
+  flex: 1;
+}
+
+.secondary {
+  background: #eee;
+  color: #333;
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.confirm-text,
+.done-text {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #333;
+}
