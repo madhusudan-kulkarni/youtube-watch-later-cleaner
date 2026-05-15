@@ -21,7 +21,7 @@ export default defineBackground(() => {
     });
   });
 
-  chrome.runtime.onMessage.addListener((msg, _sender) => {
+  chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'cleaner:done' || msg.type === 'cleaner:stopped') {
       popupPort?.postMessage({ type: msg.type, removedCount: msg.removedCount ?? 0 });
     }
