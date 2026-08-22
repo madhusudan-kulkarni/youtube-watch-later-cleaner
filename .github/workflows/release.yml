@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & Package extension
+        run: npm run zip
+
+      - name: Run verification tests
+        run: npm run test
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .output/*-chrome.zip
+            .output/*-firefox.zip
+            .output/*-sources.zip
+          generate_release_notes: true
+
+      - name: Submit to Mozilla Add-ons (AMO)
+        if: env.FIREFOX_JWT_ISSUER != '' && env.FIREFOX_JWT_SECRET != ''
+        env:
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+        run: |
+          npx wxt submit \
+            --firefox-zip $(ls .output/*-firefox.zip | head -n 1) \
+            --firefox-sources-zip $(ls .output/*-sources.zip | head -n 1) \
+            --firefox-extension-id 'watch-later-cleaner@madhusudan.dev' \
+            --firefox-jwt-issuer "$FIREFOX_JWT_ISSUER" \
+            --firefox-jwt-secret "$FIREFOX_JWT_SECRET" \
+            --firefox-channel listed
