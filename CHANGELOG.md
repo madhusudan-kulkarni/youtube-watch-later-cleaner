@@ -7,8 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Live toolbar badge** — displays running count (`12`, `150`, `1.2k`), cooldown indicator (`⏳`), and completion badge (`✓`) directly on the extension icon
+- **Total count & percentage progress** — detects total playlist count and renders a deterministic progress fill bar
+- **Cooldown countdown** — 5-minute safety pauses display a live countdown timer in the popup
+- **Keyboard navigation** — press <kbd>Escape</kbd> to cancel confirm dialogs or dismiss errors
 - **Stop button** — aborts a run cleanly between removals; already-completed work is kept
-- **Live progress** — popup shows the running removal count and elapsed time while cleaning
+- **Live progress** — popup shows running removal count and elapsed time while cleaning
 - **Done view** — final count plus duration, with *Run again* and *Done* actions
 - **Error handling** — failed injections and interruptions surface as an explicit error state instead of hanging on "Running…"
 - **Wrong-page detection** — starting outside the Watch Later playlist offers an *Open Watch Later* shortcut

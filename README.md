@@ -7,11 +7,11 @@ Clears your entire Watch Later playlist with built-in safe delays, live progress
 ## Features
 
 - **One click cleanup** — removes every video in Watch Later from the playlist page
-- **Live progress** — the popup shows the running removal count and elapsed time
+- **Live progress & toolbar badge** — toolbar icon badge shows live removal count; popup displays total videos, percentage progress, and elapsed time
 - **Stop anytime** — aborts cleanly between removals; already-completed work is kept
 - **Locale independent** — matches YouTube's context menu across 25+ languages instead of relying on English labels
 - **Resilient** — retries transient failures, verifies each removal, and detects interruptions (tab closed or reloaded)
-- **Safe pacing** — small delay between removals and a longer pause every 200 videos to stay gentle with YouTube
+- **Safe pacing & cooldowns** — small delay between removals and a live-countdown 5-minute pause every 200 videos to stay gentle with YouTube
 - **Private** — no analytics, no remote code, nothing leaves your browser. State lives in `chrome.storage.session` and is cleared when the browser closes
 
 ## Usage
