@@ -1,6 +1,7 @@
 import './styles.css';
 import {
   WL_PLAYLIST_URL,
+  WL_URL_PATTERN,
   isStale,
   readCleanerState,
   resetCleanerState,
@@ -139,6 +140,8 @@ function renderConfirm() {
       currentStatus = null;
       renderHome({ wrongPage: true });
       announce('Please open the Watch Later playlist first.');
+    } else if (res.ok === false) {
+      await sync();
     }
   }));
   app.append(row);
@@ -285,7 +288,7 @@ function updateData(state: CleanerState) {
 async function checkActiveTab(): Promise<boolean> {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return !tab?.url || !tab.url.includes('list=WL');
+    return !tab?.url || !WL_URL_PATTERN.test(tab.url);
   } catch {
     return true;
   }

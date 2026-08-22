@@ -11,7 +11,7 @@ export interface CleanerState {
 }
 
 export const WL_PLAYLIST_URL = 'https://www.youtube.com/playlist?list=WL';
-export const WL_URL_PATTERN = /^https:\/\/www\.youtube\.com\/playlist\?.*list=WL/;
+export const WL_URL_PATTERN = /^https:\/\/www\.youtube\.com\/playlist\?(?:.*&)?list=WL(?:&|$|#)/;
 const STATE_KEY = 'cleanerState';
 export const STALE_MS = 15_000;
 

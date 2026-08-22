@@ -23,10 +23,10 @@ export function runCleaner() {
     if (msg && msg.action === 'cleaner:stop') stopped = true;
   });
 
-  function report(type: string) {
+  function report(type: string, error?: string) {
     try {
       chrome.runtime.sendMessage(
-        { type, removedCount: count },
+        { type, removedCount: count, error },
         () => void chrome.runtime.lastError
       );
     } catch {
@@ -91,7 +91,7 @@ export function runCleaner() {
   ];
 
   const MENU_ITEM_SELECTOR =
-    'ytd-menu-popup-renderer tp-yt-paper-item, ytd-menu-popup-renderer ytd-menu-service-item-renderer';
+    'ytd-menu-popup-renderer tp-yt-paper-item, ytd-menu-popup-renderer ytd-menu-service-item-renderer, ytd-menu-popup-renderer [role="menuitem"], ytd-menu-popup-renderer yt-list-item-view-model';
 
   function findRemoveItem(): HTMLElement | null {
     for (const el of document.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR)) {
@@ -155,15 +155,34 @@ export function runCleaner() {
     }
   }
 
+  function isWatchLaterPage(): boolean {
+    try {
+      return (window.location?.href || location?.href || '').includes('list=WL');
+    } catch {
+      return true;
+    }
+  }
+
   async function run() {
     while (!stopped) {
+      if (!isWatchLaterPage()) {
+        report('cleaner:error', 'Interrupted — navigated away from Watch Later');
+        return;
+      }
+
       let video = await waitFor(firstRenderer, EMPTY_CHECK_MS);
 
       // Virtualized list may need a nudge to render more items.
       if (!video) {
         scrollListToTop();
         video = await waitFor(firstRenderer, EMPTY_CHECK_MS);
-        if (!video) break; // playlist exhausted
+        if (!video) {
+          if (!isWatchLaterPage()) {
+            report('cleaner:error', 'Interrupted — navigated away from Watch Later');
+            return;
+          }
+          break; // playlist exhausted
+        }
       }
 
       let removed = false;

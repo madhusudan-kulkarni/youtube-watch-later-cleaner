@@ -61,10 +61,12 @@ function makeSandbox() {
     querySelector: () => null,
     body: { dispatchEvent: () => {} }
   };
+  const location = { href: 'https://www.youtube.com/playlist?list=WL' };
   const context = vm.createContext({
     chrome,
     document,
-    window: { scrollTo: () => {} },
+    location,
+    window: { scrollTo: () => {}, location },
     setTimeout,
     clearTimeout,
     setInterval,
