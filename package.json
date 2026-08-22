@@ -2,7 +2,7 @@
   "name": "youtube-watch-later-cleaner",
   "description": "Safely remove videos from your YouTube Watch Later playlist.",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -11,11 +11,15 @@
     "build:chrome": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node scripts/verify-cleaner.mjs .output/chrome-mv3/background.js && node scripts/verify-cleaner.mjs .output/firefox-mv2/background.js",
     "postinstall": "wxt prepare"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.315",
+    "eslint": "^10.9.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.67.0",
     "wxt": "^0.20.26"
   }
 }

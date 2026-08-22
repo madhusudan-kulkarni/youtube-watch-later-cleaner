@@ -1,78 +1,119 @@
-let popupPort: chrome.runtime.Port | null = null;
+import { runCleaner } from './shared/cleaner';
+import {
+  STALE_MS,
+  WL_URL_PATTERN,
+  readCleanerState,
+  resetCleanerState,
+  writeCleanerState
+} from './shared/state';
 
 export default defineBackground(() => {
-  chrome.runtime.onConnect.addListener((port) => {
-    popupPort = port;
-    port.onDisconnect.addListener(() => { popupPort = null; });
-
-    port.onMessage.addListener((msg) => {
-      if (msg.action === 'startDeletion') {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          const tab = tabs[0];
-          if (!tab?.id) return;
-
-          chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: runCleaner,
-            args: [msg.settings ?? {}]
-          });
-        });
-      }
-    });
+  chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
+    handleMessage(msg).then(sendResponse);
+    return true;
   });
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === 'cleaner:done' || msg.type === 'cleaner:stopped') {
-      popupPort?.postMessage({ type: msg.type, removedCount: msg.removedCount ?? 0 });
-    }
+  // A full page navigation or tab close kills the injected cleaner silently.
+  chrome.tabs.onUpdated.addListener((tabId, info) => {
+    if (info.status === 'loading') void markInterrupted(tabId, 'Interrupted — page reloaded');
+  });
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    void markInterrupted(tabId, 'Interrupted — tab closed');
   });
 });
 
-function runCleaner(settings: Record<string, number>) {
-  const batchSize = settings.batchSize ?? 200;
-  const waitBetweenBatchesMs = settings.waitBetweenBatchesMs ?? 300000;
-  const waitBetweenDeletionsMs = settings.waitBetweenRemovalsMs ?? 700;
+type RuntimeMessage =
+  | { type: 'cleaner:start' }
+  | { type: 'cleaner:stop' }
+  | { type: 'cleaner:progress'; removedCount?: number }
+  | { type: 'cleaner:done'; removedCount?: number }
+  | { type: 'cleaner:error'; error?: string };
 
-  let count = 0;
-
-  async function deleteVideoFromWatchLater() {
-    const video = document.querySelector('ytd-playlist-video-renderer');
-    if (!video) return false;
-
-    const menuButton = video.querySelector<HTMLElement>('button[aria-label="Action menu"], button[aria-label*="Action"]');
-    if (!menuButton) return false;
-
-    menuButton.click();
-    await new Promise((r) => setTimeout(r, 300));
-
-    const removeItem = document.evaluate(
-      '//span[contains(text(),"Remove from")]',
-      document,
-      null,
-      XPathResult.FIRST_ORDERED_NODE_TYPE,
-      null
-    ).singleNodeValue as HTMLElement | null;
-
-    if (!removeItem) return false;
-
-    removeItem.click();
-    await new Promise((r) => setTimeout(r, 300));
-    return true;
-  }
-
-  async function run() {
-    while (true) {
-      const removed = await deleteVideoFromWatchLater();
-      if (!removed) break;
-      count++;
-      if (count % batchSize === 0) {
-        await new Promise((r) => setTimeout(r, waitBetweenBatchesMs));
-      } else {
-        await new Promise((r) => setTimeout(r, waitBetweenDeletionsMs));
-      }
+async function handleMessage(msg: RuntimeMessage): Promise<unknown> {
+  switch (msg?.type) {
+    case 'cleaner:start':
+      return startDeletion();
+    case 'cleaner:stop':
+      return stopDeletion();
+    case 'cleaner:progress':
+      return writeCleanerState({ removedCount: msg.removedCount ?? 0 });
+    case 'cleaner:done': {
+      const prev = await readCleanerState();
+      return writeCleanerState({
+        status: 'done',
+        removedCount: msg.removedCount ?? 0,
+        startedAt: prev.startedAt || Date.now(),
+        endedAt: Date.now()
+      });
     }
-    chrome.runtime.sendMessage({ type: count > 0 ? 'cleaner:done' : 'cleaner:stopped', removedCount: count });
+    case 'cleaner:error':
+      return writeCleanerState({ status: 'error', error: msg.error ?? 'Unknown error' });
+    default:
+      return undefined;
+  }
+}
+
+async function startDeletion() {
+  const current = await readCleanerState();
+  if (
+    (current.status === 'running' || current.status === 'stopping') &&
+    Date.now() - current.updatedAt <= STALE_MS
+  ) {
+    return { ok: false, reason: 'already-running' };
   }
 
-  run();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !tab.url || !WL_URL_PATTERN.test(tab.url)) {
+    return { ok: false, reason: 'wrong-page' };
+  }
+
+  await writeCleanerState({
+    status: 'running',
+    removedCount: 0,
+    startedAt: Date.now(),
+    error: undefined,
+    tabId: tab.id
+  });
+
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: runCleaner });
+    return { ok: true };
+  } catch (err) {
+    await writeCleanerState({
+      status: 'error',
+      error: err instanceof Error ? err.message : 'Could not access this page'
+    });
+    return { ok: false, reason: 'inject-failed' };
+  }
+}
+
+async function stopDeletion() {
+  const state = await readCleanerState();
+  if (state.status !== 'running' && state.status !== 'stopping') {
+    await resetCleanerState();
+    return { ok: false };
+  }
+
+  await writeCleanerState({ status: 'stopping' });
+
+  if (typeof state.tabId === 'number') {
+    try {
+      await chrome.tabs.sendMessage(state.tabId, { action: 'cleaner:stop' });
+    } catch {
+      /* receiver gone — staleness handling cleans up */
+    }
+  }
+  return { ok: true };
+}
+
+async function markInterrupted(tabId: number, message: string) {
+  const state = await readCleanerState();
+  if (state.tabId !== tabId) return;
+  if (state.status !== 'running' && state.status !== 'stopping') return;
+
+  await writeCleanerState(
+    state.status === 'stopping'
+      ? { status: 'done', endedAt: Date.now() }
+      : { status: 'error', error: message }
+  );
 }
