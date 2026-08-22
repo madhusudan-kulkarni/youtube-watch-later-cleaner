@@ -3,6 +3,8 @@ export type CleanerStatus = 'idle' | 'running' | 'stopping' | 'done' | 'error';
 export interface CleanerState {
   status: CleanerStatus;
   removedCount: number;
+  totalCount?: number;
+  coolingDownUntil?: number;
   startedAt: number;
   updatedAt: number;
   endedAt?: number;

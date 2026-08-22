@@ -13,9 +13,14 @@ const live = document.getElementById('live')!;
 
 let currentStatus: string | null = null;
 let countEl: HTMLElement | null = null;
+let countLabelEl: HTMLElement | null = null;
+let barFillEl: HTMLElement | null = null;
+let statusLabelEl: HTMLElement | null = null;
+let statusDotEl: HTMLElement | null = null;
 let elapsedEl: HTMLElement | null = null;
 let ticker: number | undefined;
 let startedAt = 0;
+let coolingDownUntil: number | undefined;
 
 /* ---------- helpers ---------- */
 
@@ -53,7 +58,19 @@ function stopTicker() {
 function startTicker() {
   stopTicker();
   const tick = () => {
-    if (elapsedEl && startedAt) elapsedEl.textContent = formatDuration(Date.now() - startedAt);
+    if (elapsedEl && startedAt) {
+      elapsedEl.textContent = formatDuration(Date.now() - startedAt);
+    }
+    if (coolingDownUntil && statusLabelEl) {
+      const remainingMs = coolingDownUntil - Date.now();
+      if (remainingMs > 0) {
+        statusLabelEl.textContent = `Safe cooldown (${formatDuration(remainingMs)} remaining)…`;
+      } else {
+        coolingDownUntil = undefined;
+        if (statusDotEl) statusDotEl.className = 'dot';
+        statusLabelEl.textContent = 'Cleaning…';
+      }
+    }
   };
   tick();
   ticker = window.setInterval(tick, 1000);
@@ -157,26 +174,36 @@ function renderRunning(state: CleanerState) {
   app.textContent = '';
   app.append(header());
 
+  const isCooling = Boolean(state.coolingDownUntil && state.coolingDownUntil > Date.now());
   const statusRow = el('div', 'status-row');
-  statusRow.append(el('span', 'dot'), el('span', 'status-label', 'Cleaning\u2026'));
+  statusDotEl = el('span', `dot${isCooling ? ' dot-cooldown' : ''}`);
+  const statusText = isCooling
+    ? `Safe cooldown (${formatDuration(state.coolingDownUntil! - Date.now())} remaining)…`
+    : 'Cleaning\u2026';
+  statusLabelEl = el('span', 'status-label', statusText);
+  statusRow.append(statusDotEl, statusLabelEl);
   app.append(statusRow);
 
   const big = el('div', 'count');
-  countEl = el('span', 'count-num', String(state.removedCount));
-  big.append(countEl, el('span', 'count-label', 'removed'));
+  countEl = el('span', 'count-num', '');
+  countLabelEl = el('span', 'count-label', 'removed');
+  big.append(countEl, countLabelEl);
   app.append(big);
 
   const barWrap = el('div', 'bar');
-  barWrap.append(el('div', 'bar-fill'));
+  barFillEl = el('div', 'bar-fill');
+  barWrap.append(barFillEl);
   app.append(barWrap);
 
   const meta = el('div', 'meta');
   elapsedEl = el('span', undefined, formatDuration(Date.now() - state.startedAt));
   startedAt = state.startedAt;
+  coolingDownUntil = state.coolingDownUntil;
   meta.append(elapsedEl);
   app.append(meta);
 
   app.append(button('btn-danger-outline', 'Stop', () => void sendMessage({ type: 'cleaner:stop' })));
+  updateData(state);
   startTicker();
   announce(`Running. ${state.removedCount} removed so far.`);
 }
@@ -257,6 +284,10 @@ function renderError(state: CleanerState) {
 function buildView(state: CleanerState) {
   stopTicker();
   countEl = null;
+  countLabelEl = null;
+  barFillEl = null;
+  statusLabelEl = null;
+  statusDotEl = null;
   elapsedEl = null;
 
   switch (state.status) {
@@ -279,7 +310,24 @@ function buildView(state: CleanerState) {
 }
 
 function updateData(state: CleanerState) {
-  if (countEl) countEl.textContent = String(state.removedCount);
+  if (state.totalCount && state.totalCount > 0) {
+    const pct = Math.min(100, Math.round((state.removedCount / state.totalCount) * 100));
+    if (countEl) countEl.textContent = `${state.removedCount} / ${state.totalCount}`;
+    if (countLabelEl) countLabelEl.textContent = `removed (${pct}%)`;
+    if (barFillEl) {
+      barFillEl.classList.add('bar-fill-deterministic');
+      barFillEl.style.width = `${Math.max(3, pct)}%`;
+    }
+  } else {
+    if (countEl) countEl.textContent = String(state.removedCount);
+    if (countLabelEl) countLabelEl.textContent = 'removed';
+    if (barFillEl) {
+      barFillEl.classList.remove('bar-fill-deterministic');
+      barFillEl.style.width = '';
+    }
+  }
+
+  coolingDownUntil = state.coolingDownUntil;
   if (elapsedEl && state.startedAt) {
     elapsedEl.textContent = formatDuration(Date.now() - state.startedAt);
   }
@@ -311,6 +359,18 @@ async function sync(): Promise<void> {
   }
   updateData(state);
 }
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (currentStatus === 'confirm') {
+      currentStatus = null;
+      void checkActiveTab().then((wrongPage) => renderHome({ wrongPage }));
+    } else if (currentStatus === 'error') {
+      currentStatus = null;
+      void resetCleanerState().then(() => void sync());
+    }
+  }
+});
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'session' && changes.cleanerState) void sync();

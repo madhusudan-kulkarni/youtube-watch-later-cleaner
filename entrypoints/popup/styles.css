@@ -204,6 +204,11 @@ p {
   animation-duration: 0.7s;
 }
 
+.dot-cooldown {
+  background: var(--warn);
+  animation-duration: 1s;
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -225,7 +230,7 @@ p {
 }
 
 .count-num {
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -250,6 +255,11 @@ p {
   border-radius: 999px;
   background: linear-gradient(90deg, var(--accent), var(--accent-strong));
   animation: slide 1.4s ease-in-out infinite;
+}
+
+.bar-fill-deterministic {
+  animation: none;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes slide {

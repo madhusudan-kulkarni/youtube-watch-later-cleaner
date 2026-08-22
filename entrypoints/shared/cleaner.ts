@@ -23,10 +23,22 @@ export function runCleaner() {
     if (msg && msg.action === 'cleaner:stop') stopped = true;
   });
 
-  function report(type: string, error?: string) {
+  let totalCount: number | undefined;
+
+  function report(
+    type: string,
+    error?: string,
+    extra?: { coolingDownUntil?: number }
+  ) {
     try {
       chrome.runtime.sendMessage(
-        { type, removedCount: count, error },
+        {
+          type,
+          removedCount: count,
+          error,
+          totalCount,
+          coolingDownUntil: extra?.coolingDownUntil
+        },
         () => void chrome.runtime.lastError
       );
     } catch {
@@ -142,16 +154,43 @@ export function runCleaner() {
     window.scrollTo(0, 0);
   }
 
+  function getPlaylistTotal(): number | undefined {
+    try {
+      const stats = document.querySelectorAll<HTMLElement>(
+        'ytd-playlist-byline-renderer yt-formatted-string, #stats yt-formatted-string, ytd-playlist-header-renderer yt-formatted-string, .metadata-stats yt-formatted-string'
+      );
+      for (const el of stats) {
+        const text = (el.textContent || '').trim();
+        const match = text.match(
+          /([\d,.]+)\s*(?:videos?|vidéos?|video's|vídeos?|video|видео|فيديو|वीडियो|개|個|部)/i
+        );
+        if (match?.[1]) {
+          const num = parseInt(match[1].replace(/[^\d]/g, ''), 10);
+          if (!isNaN(num) && num > 0) return num;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }
+
   /** Sleep in slices, reporting progress so the popup never sees a stale run. */
-  async function pacedWait(totalMs: number) {
+  async function pacedWait(totalMs: number, isCooldown = false) {
     let nextBeat = Date.now() + HEARTBEAT_INTERVAL_MS;
     const end = Date.now() + totalMs;
+    if (isCooldown) {
+      report('cleaner:progress', undefined, { coolingDownUntil: end });
+    }
     while (Date.now() < end && !stopped) {
       await sleep(Math.min(POLL_MS * 5, Math.max(0, end - Date.now())));
       if (!stopped && Date.now() >= nextBeat) {
-        report('cleaner:progress');
+        report('cleaner:progress', undefined, isCooldown ? { coolingDownUntil: end } : undefined);
         nextBeat += HEARTBEAT_INTERVAL_MS;
       }
+    }
+    if (isCooldown && !stopped) {
+      report('cleaner:progress', undefined, { coolingDownUntil: undefined });
     }
   }
 
@@ -164,6 +203,11 @@ export function runCleaner() {
   }
 
   async function run() {
+    totalCount = getPlaylistTotal();
+    if (totalCount) {
+      report('cleaner:progress');
+    }
+
     while (!stopped) {
       if (!isWatchLaterPage()) {
         report('cleaner:error', 'Interrupted — navigated away from Watch Later');
@@ -203,9 +247,9 @@ export function runCleaner() {
       report('cleaner:progress');
 
       if (!stopped && count % BATCH_SIZE === 0) {
-        await pacedWait(BATCH_WAIT_MS);
+        await pacedWait(BATCH_WAIT_MS, true);
       } else if (!stopped) {
-        await pacedWait(DELETION_WAIT_MS);
+        await pacedWait(DELETION_WAIT_MS, false);
       }
     }
 
